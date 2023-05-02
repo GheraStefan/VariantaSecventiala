@@ -1,4 +1,1 @@
-﻿  main.cpp
-C:\Users\nimic\OneDrive\Desktop\APD\VariantaSecventiala\Secv\Secv\main.cpp(11,20): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
-C:\Users\nimic\OneDrive\Desktop\APD\VariantaSecventiala\Secv\Secv\main.cpp(65,33): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-  Secv.vcxproj -> C:\Users\nimic\OneDrive\Desktop\APD\VariantaSecventiala\Secv\x64\Debug\Secv.exe
+﻿  Secv.vcxproj -> C:\Users\nimic\OneDrive\Desktop\APD\VariantaSecventiala\Secv\x64\Debug\Secv.exe

@@ -1,32 +1,86 @@
-#include <iostream>
+﻿#include <iostream>
 #include <fstream>
 #include <vector>
-#include <chrono>
-
-#define NUM_ELEMENTS 1000
+#include "mpi.h"
+#include <string>
 
 using namespace std;
 
-void random_numbers() {
-    srand(std::time(nullptr));
+void quicksort_parallel(vector<int>& v, int left, int right);
 
-    ofstream fin("input.txt");
+int main(int argc, char** argv) {
+    int rank, size;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    for (int i = 0; i < NUM_ELEMENTS; i++)
-    {
-        fin << rand() % 100 + 1 << " ";
+    if (argc < 2) {
+        if (rank == 0) {
+            cout << "Usage: " << argv[0] << " filename" << endl;
+        }
+        MPI_Finalize();
+        return 1;
     }
 
-    fin.close();
+    vector<int> input_sizes = { 50, 100, 1000, 10000 }; // dimensiunile fisierelor de intrare
+    string input_prefix = "input"; // prefixul fisierelor de intrare
+    string output_prefix = "output"; // prefixul fisierelor de iesire
+
+    // Sortam fiecare set de date
+    for (int i = 0; i < input_sizes.size(); i++) {
+        vector<int> v;
+        int n = 0;
+
+        // Citim datele din fisier
+        if (rank == 0) {
+            string input_filename = input_prefix + to_string(input_sizes[i]);
+            ifstream fin(input_filename);
+            fin >> n;
+            v.resize(n);
+            for (int i = 0; i < n; i++) {
+                fin >> v[i];
+            }
+            fin.close();
+        }
+
+        // Trimitem dimensiunea vectorului catre toate procesele
+        MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Calculam dimensiunea bucății și trimitem bucățile de date la fiecare proces
+        int chunk_size = n / size;
+        vector<int> local_v(chunk_size);
+        MPI_Scatter(&v[0], chunk_size, MPI_INT, &local_v[0], chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Sortam bucata locala
+        quicksort_parallel(local_v, 0, chunk_size - 1);
+
+        // Adunam bucata sortata la procesul master
+        MPI_Gather(&local_v[0], chunk_size, MPI_INT, &v[0], chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Procesul master afiseaza datele sortate in fisierul de iesire corespunzator
+        if (rank == 0) {
+            string output_filename = output_prefix + to_string(input_sizes[i]);
+            ofstream fout(output_filename);
+            for (int i = 0; i < n; i++) {
+                fout << v[i] << " ";
+            }
+            fout.close();
+        }
+    }
+
+    MPI_Finalize();
+    return 0;
 }
 
-void quicksort(vector<int>& v, int left, int right) {
+
+void quicksort_parallel(vector<int>& v, int left, int right) {
     if (left >= right) {
         return;
     }
     int pivot = v[(left + right) / 2];
     int i = left;
     int j = right;
+
     while (i <= j) {
         while (v[i] < pivot) {
             i++;
@@ -40,46 +94,15 @@ void quicksort(vector<int>& v, int left, int right) {
             j--;
         }
     }
-    quicksort(v, left, j);
-    quicksort(v, i, right);
-}
 
-int main() {
-    random_numbers();
-
-    vector<int> v;
-    ifstream fin("input.txt");
-    if (fin.is_open()) {
-        int x;
-        while (fin >> x) {
-            v.push_back(x);
-        }
-        fin.close();
+    // Recursiv sortam cele doua parti ale vectorului in paralel
+    if (left < j) {
+#pragma omp task
+        quicksort_parallel(v, left, j);
     }
-    else {
-        cout << "Nu s-a putut deschide fisierul de intrare." << endl;
-        return 1;
+    if (i < right) {
+#pragma omp task
+        quicksort_parallel(v, i, right);
     }
-
-    auto start = chrono::high_resolution_clock::now();
-    quicksort(v, 0, v.size() - 1);
-    auto stop = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::microseconds>(stop - start);
-
-    ofstream fout("output.txt");
-    if (fout.is_open()) {
-        for (int i = 0; i < v.size(); i++) {
-            fout << v[i] << endl;
-        }
-        fout.close();
-    }
-    else {
-        cout << "Nu s-a putut deschide fisierul de iesire." << endl;
-        return 1;
-    }
-
-    cout << "Timpul de executie: " << duration.count() << " microsecunde" << endl;
-    cout << "Memoria alocata: " << sizeof(v[0]) * v.size() << " bytes" << endl;
-    cout << " ";
-    return 0;
+#pragma omp taskwait
 }
